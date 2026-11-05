@@ -119,6 +119,13 @@ static void HandleExceptions(NSException *exception) {
 
 - (void)handleActionForType:(NSString *)actionType {
 
+    // TweakInject already performs the required userspace/respring restart
+    // after toggling its state, so run it immediately without a second prompt.
+    if ([actionType isEqualToString:TSActionTypeTweakInject]) {
+        HandleActionForType(actionType);
+        return;
+    }
+
     if (CanRunWithoutConfirmation(actionType) && !TSUserDefaults.sharedDefaults.requireActionConfirmation) {
 
         HandleActionForType(actionType);

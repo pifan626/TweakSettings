@@ -7,8 +7,8 @@ if [ ! -f "$UTILITY" ]; then
 fi
 
 if [ -f "$UTILITY" ]; then
-    chown root:wheel $UTILITY
-    chmod 0777 $UTILITY
+    chown root:wheel "$UTILITY"
+    chmod 4755 "$UTILITY"
     chmod +s $UTILITY
     echo "set $UTILITY permissions"
 fi
@@ -20,15 +20,15 @@ if [ ! -f "$APP" ]; then
 fi
 
 if [ -f "$APP" ]; then
-    chown root:wheel $APP
-    chmod 0755 $APP
+    chown root:wheel "$APP"
+    chmod 0755 "$APP"
     echo "set $APP permissions"
 fi
 
 APP_FOLDER=${APP%/*}
 
-if [ -f "$APP_FOLDER" ]; then
-  uicache -p APP_FOLDER
+if [ -d "$APP_FOLDER" ]; then
+  uicache -p "$APP_FOLDER"
   echo $APP_FOLDER
 fi
 

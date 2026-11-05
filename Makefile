@@ -1,5 +1,5 @@
 ifeq ($(THEOS_PACKAGE_SCHEME),rootless)
-export TARGET = iphone:clang:14.4:15.0
+export TARGET = iphone:clang:latest:15.0
 export ARCHS = arm64
 TweakSettings_XCODEFLAGS = GCC_PREPROCESSOR_DEFINITIONS='THEOS_PACKAGE_INSTALL_PREFIX=\"$(THEOS_PACKAGE_INSTALL_PREFIX)\"'
 else

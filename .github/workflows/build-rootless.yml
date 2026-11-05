@@ -25,11 +25,11 @@ jobs:
       - name: Build Rootless package
         run: |
           make clean
-          make package THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1
+          make package THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1 ARCHS=arm64e
 
       - name: Upload DEB
         uses: actions/upload-artifact@v4
         with:
-          name: TweakSettings-zh_CN-rootless
+          name: TweakSettings-zh_CN-rootless-arm64e
           path: Releases/*.deb
           if-no-files-found: error

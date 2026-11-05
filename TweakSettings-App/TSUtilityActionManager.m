@@ -95,31 +95,18 @@ NSString *TitleForActionType(NSString *type) {
     return nil;
 }
 
-// Relaxin exposes its active RootHide root through systemhook's get_jbroot().
-static NSString *RelaxinSafeModeMarkerPath(void) {
-    void *systemHook = dlopen("systemhook.dylib", RTLD_LAZY | RTLD_NOLOAD);
-    if (systemHook) {
-        typedef char *(*get_jbroot_t)(void);
-        get_jbroot_t getter = (get_jbroot_t)dlsym(systemHook, "get_jbroot");
-        const char *root = getter ? getter() : NULL;
-        if (root && root[0] == '/') {
-            NSString *path = [NSString stringWithFormat:@"%s/basebin/.safe_mode", root];
-            dlclose(systemHook);
-            return path;
-        }
-        dlclose(systemHook);
-    }
-    // RootHide's compatibility symlink is used only as a fallback.
-    return @"/var/jb/basebin/.safe_mode";
-}
-
-// Returns 1 when injection is enabled, 0 when disabled, and -1 when unknown.
+// Relaxin 0.5.7 has no verified public tweak-injection toggle API.
+// Never infer injection state from an unverified marker file.
 static NSInteger TweakInjectEnabledState(void) {
-    NSString *marker = RelaxinSafeModeMarkerPath();
-    if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/basebin/jbctl"] ||
-        [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/basebin/.safe_mode"] ||
-        [[NSFileManager defaultManager] fileExistsAtPath:marker]) {
-        return [[NSFileManager defaultManager] fileExistsAtPath:marker] ? 0 : 1;
+    if (access(ROOT_PATH("/basebin/jbctl"), F_OK) == 0) return -1;
+    if (access("/var/jb/.installed_dopamine", F_OK) == 0) {
+        return access("/var/jb/basebin/.safe_mode", F_OK) == 0 ? 0 : 1;
+    }
+    if (access(ROOT_PATH("/usr/lib/TweakInject.dylib"), F_OK) == 0) {
+        return access(ROOT_PATH("/.disable_tweakinject"), F_OK) == 0 ? 0 : 1;
+    }
+    if (access(ROOT_PATH("/etc/rc.d/substrate"), F_OK) == 0) {
+        return access(ROOT_PATH("/var/tmp/.substrated_disable_loader"), F_OK) == 0 ? 0 : 1;
     }
     return -1;
 }

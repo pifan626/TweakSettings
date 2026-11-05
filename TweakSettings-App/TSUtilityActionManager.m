@@ -12,6 +12,7 @@
 #import "TSAppDelegate.h"
 #import "rootless.h"
 #import "NSTask.h"
+#include <unistd.h>
 
 NSString *const TSActionTypeRespring = @"respring";
 NSString *const TSActionTypeSafemode = @"safemode";
@@ -72,8 +73,39 @@ NSString *TitleForActionType(NSString *type) {
     if ([type isEqualToString:TSActionTypeLDRestart]) return NSLocalizedString(LDRESTART_TITLE_KEY, nil);
     if ([type isEqualToString:TSActionTypeReboot]) return NSLocalizedString(REBOOT_TITLE_KEY, nil);
     if ([type isEqualToString:TSActionTypeUserspaceReboot]) return NSLocalizedString(USREBOOT_TITLE_KEY, nil);
-    if ([type isEqualToString:TSActionTypeTweakInject]) return NSLocalizedString(TWEAKINJECT_TITLE_KEY, nil);
+    if ([type isEqualToString:TSActionTypeTweakInject]) return TweakInjectNextActionTitle();
     return nil;
+}
+
+// Returns 1 when injection is enabled, 0 when disabled, and -1 when the state cannot be detected.
+static NSInteger TweakInjectEnabledState(void) {
+    if (access("/var/jb/.installed_dopamine", F_OK) == 0) {
+        return access("/var/jb/basebin/.safe_mode", F_OK) == 0 ? 0 : 1;
+    }
+
+    if (access(ROOT_PATH("/usr/lib/TweakInject.dylib"), F_OK) == 0) {
+        return access(ROOT_PATH("/.disable_tweakinject"), F_OK) == 0 ? 0 : 1;
+    }
+
+    if (access(ROOT_PATH("/etc/rc.d/substrate"), F_OK) == 0) {
+        return access(ROOT_PATH("/var/tmp/.substrated_disable_loader"), F_OK) == 0 ? 0 : 1;
+    }
+
+    return -1;
+}
+
+static NSString *TweakInjectCurrentStateText(void) {
+    NSInteger state = TweakInjectEnabledState();
+    if (state == 1) return NSLocalizedString(TWEAKINJECT_STATE_ENABLED_KEY, nil);
+    if (state == 0) return NSLocalizedString(TWEAKINJECT_STATE_DISABLED_KEY, nil);
+    return NSLocalizedString(TWEAKINJECT_STATE_UNKNOWN_KEY, nil);
+}
+
+static NSString *TweakInjectNextActionTitle(void) {
+    NSInteger state = TweakInjectEnabledState();
+    if (state == 1) return NSLocalizedString(TWEAKINJECT_ACTION_DISABLE_KEY, nil);
+    if (state == 0) return NSLocalizedString(TWEAKINJECT_ACTION_ENABLE_KEY, nil);
+    return NSLocalizedString(TWEAKINJECT_TITLE_KEY, nil);
 }
 
 NSString *SubtitleForActionType(NSString *type) {
@@ -107,7 +139,13 @@ int HandleActionForType(NSString *actionType) {
 UIAlertController *ActionAlertForType(NSString *actionType) {
 
     NSString *title = TitleForActionType(actionType);
-    NSString *message = [NSString stringWithFormat:NSLocalizedString(ALERT_ACTION_MESSAGE_KEY, nil), SubtitleForActionType(actionType)];
+    NSString *message;
+    if ([actionType isEqualToString:TSActionTypeTweakInject]) {
+        message = [NSString stringWithFormat:NSLocalizedString(TWEAKINJECT_CONFIRM_MESSAGE_KEY, nil),
+                   TweakInjectCurrentStateText(), title];
+    } else {
+        message = [NSString stringWithFormat:NSLocalizedString(ALERT_ACTION_MESSAGE_KEY, nil), SubtitleForActionType(actionType)];
+    }
     UIAlertController *controller = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
 
     [controller addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
@@ -143,7 +181,7 @@ UIAlertController *ActionListAlert(void) {
             [APP_DELEGATE handleActionForType:TSActionTypeUserspaceReboot];
         }]];
     }
-    [controller addAction:[UIAlertAction actionWithTitle:NSLocalizedString(TWEAKINJECT_TITLE_KEY, nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [controller addAction:[UIAlertAction actionWithTitle:TweakInjectNextActionTitle() style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         [APP_DELEGATE handleActionForType:TSActionTypeTweakInject];
     }]];
     [controller addAction:[UIAlertAction actionWithTitle:NSLocalizedString(ALERT_CANCEL_TITLE_KEY, nil) style:UIAlertActionStyleCancel handler:nil]];

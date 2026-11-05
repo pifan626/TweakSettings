@@ -2,20 +2,20 @@
 /* TweakSettings 简体中文本地化 */
 
 /* 应用快捷操作标题 */
-"RESPRING_TITLE_KEY" = "重新启动 SpringBoard";
+"RESPRING_TITLE_KEY" = "重启桌面";
 "SAFEMODE_TITLE_KEY" = "进入安全模式";
 "UICACHE_TITLE_KEY" = "刷新图标缓存";
-"LDRESTART_TITLE_KEY" = "执行 LDRestart";
+"LDRESTART_TITLE_KEY" = "软重启";
 "REBOOT_TITLE_KEY" = "重启设备";
-"USREBOOT_TITLE_KEY" = "重启用户空间";
+"USREBOOT_TITLE_KEY" = "用户空间重启";
 "TWEAKINJECT_TITLE_KEY" = "切换插件注入";
 
 /* 应用快捷操作说明 */
 "TWEAKINJECT_SUBTITLE_KEY" = "开启或关闭插件注入";
 "UICACHE_SUBTITLE_KEY" = "刷新图标缓存";
 "SAFEMODE_SUBTITLE_KEY" = "使设备进入安全模式";
-"RESPRING_SUBTITLE_KEY" = "重新启动 SpringBoard";
-"LDRESTART_SUBTITLE_KEY" = "执行 ldrestart";
+"RESPRING_SUBTITLE_KEY" = "重新启动 SpringBoard（桌面进程）";
+"LDRESTART_SUBTITLE_KEY" = "执行软重启，重新启动相关系统服务";
 "REBOOT_SUBTITLE_KEY" = "重新启动设备";
 "USREBOOT_SUBTITLE_KEY" = "重新启动用户空间";
 
@@ -27,13 +27,13 @@
 /* 提示框 */
 "ALERT_CANCEL_TITLE_KEY" = "取消";
 "ALERT_DISMISS_TITLE_KEY" = "关闭";
-"ALERT_ACTION_MESSAGE_KEY" = "此操作将：%@\\n\\n确定要继续吗？";
+"ALERT_ACTION_MESSAGE_KEY" = "此操作将：%@\n\n确定要继续吗？";
 
 /* 应用设置 */
 "ALWAYS_SHOW_SEARCH_BAR_NAME_KEY" = "始终显示搜索栏";
 "ALWAYS_SHOW_SEARCH_BAR_GROUP_KEY" = "开启后，即使滚动页面，主页面的搜索栏也会始终显示";
 "REQUIRE_ACTION_CONFIRMATION_NAME_KEY" = "操作前确认";
-"REQUIRE_ACTION_CONFIRMATION_GROUP_KEY" = "开启后，执行操作前会显示确认提示。注意：重启设备、LDRestart 和用户空间重启始终会显示确认提示";
+"REQUIRE_ACTION_CONFIRMATION_GROUP_KEY" = "开启后，执行操作前会显示确认提示。注意：重启设备、软重启和用户空间重启始终会显示确认提示";
 "LONG_PRESS_OPENS_SETTINGS_NAME_KEY" = "长按打开设置";
 "LONG_PRESS_OPENS_SETTINGS_GROUP_KEY" = "开启后，长按主页面中的项目可在“设置”应用中打开对应插件的设置页面";
 "USE_LARGE_TITLES_ON_ROOT_LIST_NAME_KEY" = "使用大标题";

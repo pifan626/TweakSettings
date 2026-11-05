@@ -19,11 +19,7 @@
 
 int proc_pidpath(pid_t pid, void *buffer, uint32_t buffersize);
 
-typedef char *(*jbroot_getter_t)(void);
-typedef int (*jb_checkin_t)(char **, char **, char **, bool *);
-typedef int (*jb_set_mac_label_t)(uint64_t, uint64_t, uint64_t *);
-
-static char gJailbreakRoot[PATH_MAX];
+extern char **environ;
 
 static char gJailbreakRoot[PATH_MAX];
 static void *gLibjailbreak;
@@ -68,11 +64,6 @@ static int run_unsandboxed_end(uint64_t originalLabel, bool changedLabel) {
     set_mac_label_t setMacLabel = (set_mac_label_t)dlsym(gLibjailbreak, "jbclient_root_set_mac_label");
     return setMacLabel ? setMacLabel(1, originalLabel, NULL) : ENOENT;
 }
-static int elevate_effective_ids(void) {
-    if (geteuid() != 0 && seteuid(0) != 0) return errno ? errno : EPERM;
-    if (getegid() != 0 && setegid(0) != 0) return errno ? errno : EPERM;
-    return (geteuid() == 0 && getegid() == 0) ? 0 : EPERM;
-}
 static int spawn_suspended_and_resume(const char *path, char *const argv[]) {
     posix_spawnattr_t attr;
     int status = posix_spawnattr_init(&attr);
@@ -106,7 +97,7 @@ static void print_usage(void) {
     printf("[--ldrestart]:\n\tPerform ldrestart\n");
     printf("[--reboot]:\n\tReboot the device\n");
     printf("[--usreboot]:\n\tRestart userspace through Relaxin jbctl\n");
-    printf("[--tweakinject]:\n\tToggle Relaxin tweak injection and restart userspace\n");
+    printf("[--tweakinject]:\n\tNot available on Relaxin 0.5.7 (no public toggle API)\n");
     printf("[--help]:\n\tShow this help text\n\n");
 }
 
@@ -133,8 +124,6 @@ static int elevate_effective_ids(void) {
     if (geteuid() != 0 || getegid() != 0) return EPERM;
     return 0;
 }
-
-extern char **environ;
 
 int main(int argc, char **argv, char **envp) {
     if (!parent_is_tweaksettings()) {

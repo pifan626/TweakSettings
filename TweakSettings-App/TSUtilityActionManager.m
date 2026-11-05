@@ -34,7 +34,7 @@ struct TaskResult ExecuteCommand(NSString *command) {
     // the utility validates that its immediate parent is TweakSettings.app.
     // A shell intermediary causes every action to be rejected.
     NSString *utilityPath = ROOT_PATH_NS(@"/usr/bin/tweaksettings-utility");
-    NSString *actionArgument = command.lastPathComponent;
+    NSString *actionArgument = [command componentsSeparatedByString:@" "].lastObject;
     if (![actionArgument hasPrefix:@"--"] || access(utilityPath.fileSystemRepresentation, X_OK) != 0) {
         result.error = [NSString stringWithFormat:@"Utility unavailable or invalid action: %@", utilityPath];
         NSLog(@"TweakSettings: %@", result.error);

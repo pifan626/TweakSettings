@@ -2,7 +2,7 @@
 /* TweakSettings 简体中文本地化 */
 
 /* 应用快捷操作标题 */
-"RESPRING_TITLE_KEY" = "重启桌面";
+"RESPRING_TITLE_KEY" = "重新启动 SpringBoard";
 "SAFEMODE_TITLE_KEY" = "进入安全模式";
 "UICACHE_TITLE_KEY" = "刷新图标缓存";
 "LDRESTART_TITLE_KEY" = "软重启";

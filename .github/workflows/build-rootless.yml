@@ -24,6 +24,7 @@ jobs:
 
       - name: Build Rootless package
         run: |
+          rm -f Releases/*.deb
           make clean
           make package THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1 ARCHS=arm64e
 

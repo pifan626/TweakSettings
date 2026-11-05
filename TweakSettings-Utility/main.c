@@ -48,9 +48,12 @@ static void resolve_jailbreak_root(void) {
 }
 
 static const char *jbroot_path(const char *relativePath) {
-    static char path[PATH_MAX];
+    // Keep several resolved paths alive simultaneously (e.g. marker + dylib path).
+    static char paths[8][PATH_MAX];
+    static unsigned int nextPath = 0;
+    char *path = paths[nextPath++ % 8];
     resolve_jailbreak_root();
-    if (snprintf(path, sizeof(path), "%s%s", gJailbreakRoot, relativePath) >= (int)sizeof(path)) {
+    if (snprintf(path, PATH_MAX, "%s%s", gJailbreakRoot, relativePath) >= PATH_MAX) {
         errno = ENAMETOOLONG;
         return "";
     }

@@ -13,6 +13,8 @@
 #import "Localizable.h"
 #import "TSRootNavigationManager.h"
 #import "TSUserDefaults.h"
+#import "rootless.h"
+#include <unistd.h>
 
 
 static void HandleExceptions(NSException *exception) {
@@ -119,10 +121,16 @@ static void HandleExceptions(NSException *exception) {
 
 - (void)handleActionForType:(NSString *)actionType {
 
-    // TweakInject already performs the required userspace/respring restart
-    // after toggling its state, so run it immediately without a second prompt.
-    if ([actionType isEqualToString:TSActionTypeTweakInject]) {
-        HandleActionForType(actionType);
+    // Relaxin 0.5.7 does not expose a verified public injection toggle.
+    // Explain this instead of pretending that a marker-file change toggles injection.
+    if ([actionType isEqualToString:TSActionTypeTweakInject] &&
+        access(ROOT_PATH("/basebin/jbctl"), F_OK) == 0) {
+        UIAlertController *alert = [UIAlertController
+            alertControllerWithTitle:@"插件注入切换暂不可用"
+            message:@"Relaxin 0.5.7 目前没有可安全调用的公开插件注入开关接口。本版本不会修改注入状态，避免造成越狱环境异常。"
+            preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"知道了" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert];
         return;
     }
 

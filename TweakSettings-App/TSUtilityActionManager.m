@@ -11,7 +11,10 @@
 #import "Localizable.h"
 #import "TSAppDelegate.h"
 #import "rootless.h"
-#import "NSTask.h"
+#include <spawn.h>
+#include <sys/wait.h>
+#include <errno.h>
+#include <string.h>
 #include <unistd.h>
 
 NSString *const TSActionTypeRespring = @"respring";
@@ -25,49 +28,60 @@ NSString *const TSActionTypeTweakInject = @"tweakinject";
 static NSString *TweakInjectNextActionTitle(void);
 
 struct TaskResult ExecuteCommand(NSString *command) {
-    NSTask *task = [[NSTask alloc] init];
-    [task setLaunchPath:ROOT_PATH_NS(@"/bin/sh")];
-    [task setArguments:@[@"-c", command]];
+    struct TaskResult result = { .status = EXIT_FAILURE, .output = nil, .error = nil };
 
-    NSPipe *outputPipe = [NSPipe pipe];
-    [task setStandardOutput:outputPipe];
-
-    NSPipe *errorPipe = [NSPipe pipe];
-    [task setStandardError:errorPipe];
-
-    [task launch];
-    [task waitUntilExit];
-
-    NSData *errorData;
-    NSData *outputData;
-    NSString *output;
-    NSString *error;
-
-    if (@available(iOS 13.0, *)) {
-        outputData = [[[task standardOutput] fileHandleForReading] readDataToEndOfFileAndReturnError:nil];
-        errorData = [[[task standardError] fileHandleForReading] readDataToEndOfFileAndReturnError:nil];
-    } else {
-        outputData = [[[task standardOutput] fileHandleForReading] readDataToEndOfFile];
-        errorData = [[[task standardError] fileHandleForReading] readDataToEndOfFile];
+    // Launch the privileged utility directly. Do not use /bin/sh:
+    // the utility validates that its immediate parent is TweakSettings.app.
+    // A shell intermediary causes every action to be rejected.
+    NSString *utilityPath = ROOT_PATH_NS(@"/usr/bin/tweaksettings-utility");
+    NSString *actionArgument = command.lastPathComponent;
+    if (![actionArgument hasPrefix:@"--"] || access(utilityPath.fileSystemRepresentation, X_OK) != 0) {
+        result.error = [NSString stringWithFormat:@"Utility unavailable or invalid action: %@", utilityPath];
+        NSLog(@"TweakSettings: %@", result.error);
+        return result;
     }
 
-    if (outputData && outputData.length > 0) {
-        output =  [[NSString alloc] initWithData:outputData encoding:NSASCIIStringEncoding];
+    pid_t child = 0;
+    char * const arguments[] = {
+        (char *)utilityPath.fileSystemRepresentation,
+        (char *)actionArgument.UTF8String,
+        NULL
+    };
+
+    extern char **environ;
+    int spawnError = posix_spawn(&child, utilityPath.fileSystemRepresentation, NULL, NULL, arguments, environ);
+    if (spawnError != 0) {
+        result.status = spawnError;
+        result.error = [NSString stringWithUTF8String:strerror(spawnError)];
+        NSLog(@"TweakSettings: failed to launch utility: %@", result.error);
+        return result;
     }
 
-    if (errorData && errorData.length > 0) {
-        error = [[NSString alloc] initWithData:errorData encoding:NSASCIIStringEncoding];
-        NSLog(@"TweakSettings: TASK INPUT: %@ ERROR: %@, STATUS: %d", task.arguments.lastObject, error, task.terminationStatus);
+    int waitStatus = 0;
+    pid_t waited;
+    do {
+        waited = waitpid(child, &waitStatus, 0);
+    } while (waited == -1 && errno == EINTR);
+
+    if (waited == -1) {
+        result.status = errno;
+        result.error = [NSString stringWithUTF8String:strerror(errno)];
+        NSLog(@"TweakSettings: waitpid failed: %@", result.error);
+        return result;
     }
 
-    struct TaskResult result;
-    result.status = task.terminationStatus;
-    result.output = output;
-    result.error = error;
+    if (WIFEXITED(waitStatus)) {
+        result.status = WEXITSTATUS(waitStatus);
+    } else if (WIFSIGNALED(waitStatus)) {
+        result.status = 128 + WTERMSIG(waitStatus);
+    }
+
+    if (result.status != 0) {
+        NSLog(@"TweakSettings: utility action %@ failed with status %d", actionArgument, result.status);
+    }
 
     return result;
 }
-
 NSString *TitleForActionType(NSString *type) {
     if ([type isEqualToString:TSActionTypeRespring]) return NSLocalizedString(RESPRING_TITLE_KEY, nil);
     if ([type isEqualToString:TSActionTypeSafemode]) return NSLocalizedString(SAFEMODE_TITLE_KEY, nil);

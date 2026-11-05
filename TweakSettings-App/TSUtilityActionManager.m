@@ -22,6 +22,8 @@ NSString *const TSActionTypeReboot = @"reboot";
 NSString *const TSActionTypeUserspaceReboot = @"usreboot";
 NSString *const TSActionTypeTweakInject = @"tweakinject";
 
+static NSString *TweakInjectNextActionTitle(void);
+
 struct TaskResult ExecuteCommand(NSString *command) {
     NSTask *task = [[NSTask alloc] init];
     [task setLaunchPath:ROOT_PATH_NS(@"/bin/sh")];

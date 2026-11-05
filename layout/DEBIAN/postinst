@@ -9,7 +9,6 @@ fi
 if [ -f "$UTILITY" ]; then
     chown root:wheel "$UTILITY"
     chmod 4755 "$UTILITY"
-    chmod +s $UTILITY
     echo "set $UTILITY permissions"
 fi
 

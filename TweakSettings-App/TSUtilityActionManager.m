@@ -217,7 +217,7 @@ UIMenu *ActionListMenu(void) API_AVAILABLE(ios(13.0)) {
             [APP_DELEGATE handleActionForType:TSActionTypeUserspaceReboot];
         }]];
     }
-    [menuActions addObject:[UIAction actionWithTitle:NSLocalizedString(TWEAKINJECT_TITLE_KEY, nil) image:nil identifier:nil handler:^(__kindof UIAction *action) {
+    [menuActions addObject:[UIAction actionWithTitle:TweakInjectNextActionTitle() image:nil identifier:nil handler:^(__kindof UIAction *action) {
         [APP_DELEGATE handleActionForType:TSActionTypeTweakInject];
     }]];
 

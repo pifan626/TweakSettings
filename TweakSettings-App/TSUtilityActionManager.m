@@ -16,6 +16,8 @@
 #include <errno.h>
 #include <string.h>
 #include <unistd.h>
+#include <dlfcn.h>
+#include <limits.h>
 
 NSString *const TSActionTypeRespring = @"respring";
 NSString *const TSActionTypeSafemode = @"safemode";
@@ -93,20 +95,32 @@ NSString *TitleForActionType(NSString *type) {
     return nil;
 }
 
-// Returns 1 when injection is enabled, 0 when disabled, and -1 when the state cannot be detected.
+// Relaxin exposes its active RootHide root through systemhook's get_jbroot().
+static NSString *RelaxinSafeModeMarkerPath(void) {
+    void *systemHook = dlopen("systemhook.dylib", RTLD_LAZY | RTLD_NOLOAD);
+    if (systemHook) {
+        typedef char *(*get_jbroot_t)(void);
+        get_jbroot_t getter = (get_jbroot_t)dlsym(systemHook, "get_jbroot");
+        const char *root = getter ? getter() : NULL;
+        if (root && root[0] == '/') {
+            NSString *path = [NSString stringWithFormat:@"%s/basebin/.safe_mode", root];
+            dlclose(systemHook);
+            return path;
+        }
+        dlclose(systemHook);
+    }
+    // RootHide's compatibility symlink is used only as a fallback.
+    return @"/var/jb/basebin/.safe_mode";
+}
+
+// Returns 1 when injection is enabled, 0 when disabled, and -1 when unknown.
 static NSInteger TweakInjectEnabledState(void) {
-    if (access("/var/jb/.installed_dopamine", F_OK) == 0) {
-        return access("/var/jb/basebin/.safe_mode", F_OK) == 0 ? 0 : 1;
+    NSString *marker = RelaxinSafeModeMarkerPath();
+    if ([[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/basebin/jbctl"] ||
+        [[NSFileManager defaultManager] fileExistsAtPath:@"/var/jb/basebin/.safe_mode"] ||
+        [[NSFileManager defaultManager] fileExistsAtPath:marker]) {
+        return [[NSFileManager defaultManager] fileExistsAtPath:marker] ? 0 : 1;
     }
-
-    if (access(ROOT_PATH("/usr/lib/TweakInject.dylib"), F_OK) == 0) {
-        return access(ROOT_PATH("/.disable_tweakinject"), F_OK) == 0 ? 0 : 1;
-    }
-
-    if (access(ROOT_PATH("/etc/rc.d/substrate"), F_OK) == 0) {
-        return access(ROOT_PATH("/var/tmp/.substrated_disable_loader"), F_OK) == 0 ? 0 : 1;
-    }
-
     return -1;
 }
 
@@ -174,7 +188,7 @@ UIAlertController *ActionAlertForType(NSString *actionType) {
 
 UIAlertController *ActionListAlert(void) {
 
-    BOOL userspace_supported = access(ROOT_PATH("/odyssey/jailbreakd.plist"), F_OK) == 0 || access(ROOT_PATH("/taurine/jailbreakd.plist"), F_OK) == 0;
+    BOOL userspace_supported = access(ROOT_PATH("/odyssey/jailbreakd.plist"), F_OK) == 0 || access(ROOT_PATH("/taurine/jailbreakd.plist"), F_OK) == 0 || access(ROOT_PATH("/basebin/jbctl"), F_OK) == 0;
     UIAlertController *controller = [UIAlertController alertControllerWithTitle:nil message:nil preferredStyle:UIAlertControllerStyleActionSheet];
 
     [controller addAction:[UIAlertAction actionWithTitle:NSLocalizedString(RESPRING_TITLE_KEY, nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
@@ -211,7 +225,7 @@ UIMenu *ActionListMenu(void) API_AVAILABLE(ios(13.0)) {
     BOOL userspace_supported =
             access(ROOT_PATH("/odyssey/jailbreakd.plist"), F_OK) == 0 ||
             access(ROOT_PATH("/taurine/jailbreakd.plist"), F_OK) == 0 ||
-            access(ROOT_PATH("/.installed_dopamine"), F_OK) == 0;
+            access(ROOT_PATH("/basebin/jbctl"), F_OK) == 0;
 
     [menuActions addObject:[UIAction actionWithTitle:NSLocalizedString(RESPRING_TITLE_KEY, nil) image:nil identifier:nil handler:^(__kindof UIAction *action) {
         [APP_DELEGATE handleActionForType:TSActionTypeRespring];

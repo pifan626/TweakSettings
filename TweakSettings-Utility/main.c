@@ -35,12 +35,19 @@ void patch_setuid(uid_t user) {
 	fix_setuid_prt_t setuidptr = (fix_setuid_prt_t)dlsym(handle, "jb_oneshot_fix_setuid_now");
 	fix_entitle_prt_t entitleptr = (fix_entitle_prt_t)dlsym(handle, "jb_oneshot_entitle_now");
 
+	if (!setuidptr || !entitleptr) {
+		dlclose(handle);
+		return;
+	}
+
 	setuidptr(getpid());
 	setuid(user);
-
-	if (dlerror()) { return; }
-
+	if (dlerror()) {
+		dlclose(handle);
+		return;
+	}
 	entitleptr(getpid(), (1 << 1));
+	dlclose(handle);
 }
 
 // prints help text
@@ -103,8 +110,14 @@ int main(int argc, char **argv, char **envp) {
 	// check that TweakSettings.app is the parent process pid
 	char buffer[(1024)] = {0};
 	int pidpath = proc_pidpath(parent, buffer, sizeof(buffer));
-	if (pidpath > 0){
-		if (strcmp(buffer, ROOT_PATH("/Applications/TweakSettings.app/TweakSettings")) == 0){
+	if (pidpath > 0) {
+		// proc_pidpath may return the resolved preboot path on rootless jailbreaks,
+		// rather than the /var/jb symlink path. Match the executable path suffix.
+		const char *expected = "/Applications/TweakSettings.app/TweakSettings";
+		size_t actualLength = strlen(buffer);
+		size_t expectedLength = strlen(expected);
+		if (actualLength >= expectedLength &&
+		    strcmp(buffer + actualLength - expectedLength, expected) == 0) {
 			tweaksettings = true;
 		}
 	}

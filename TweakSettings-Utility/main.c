@@ -12,6 +12,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <errno.h>
+#include <spawn.h>
+#include <signal.h>
 
 #import "rootless.h"
 
@@ -23,32 +25,23 @@ typedef int (*jb_set_mac_label_t)(uint64_t, uint64_t, uint64_t *);
 
 static char gJailbreakRoot[PATH_MAX];
 
+static char gJailbreakRoot[PATH_MAX];
+static void *gLibjailbreak;
+typedef char *(*jbroot_getter_t)(void);
+typedef bool (*roothide_check_t)(void);
+typedef int (*set_mac_label_t)(uint64_t, uint64_t, uint64_t *);
+
 static void resolve_jailbreak_root(void) {
     if (gJailbreakRoot[0]) return;
-
-    void *systemHook = dlopen("systemhook.dylib", RTLD_LAZY | RTLD_NOLOAD);
-    if (systemHook) {
-        jbroot_getter_t getter = (jbroot_getter_t)dlsym(systemHook, "get_jbroot");
+    gLibjailbreak = dlopen("/var/jb/usr/lib/libjailbreak.dylib", RTLD_LAZY);
+    if (gLibjailbreak) {
+        jbroot_getter_t getter = (jbroot_getter_t)dlsym(gLibjailbreak, "jbclient_get_jbroot");
         const char *root = getter ? getter() : NULL;
         if (root && root[0] == '/') strlcpy(gJailbreakRoot, root, sizeof(gJailbreakRoot));
-        dlclose(systemHook);
     }
-
-    if (!gJailbreakRoot[0]) {
-        void *libjailbreak = dlopen("/var/jb/usr/lib/libjailbreak.dylib", RTLD_LAZY);
-        if (libjailbreak) {
-            jbroot_getter_t getter = (jbroot_getter_t)dlsym(libjailbreak, "jbclient_get_jbroot");
-            const char *root = getter ? getter() : NULL;
-            if (root && root[0] == '/') strlcpy(gJailbreakRoot, root, sizeof(gJailbreakRoot));
-            dlclose(libjailbreak);
-        }
-    }
-
     if (!gJailbreakRoot[0]) strlcpy(gJailbreakRoot, "/var/jb", sizeof(gJailbreakRoot));
 }
-
 static const char *jbroot_path(const char *relativePath) {
-    // Keep several resolved paths alive simultaneously (e.g. marker + dylib path).
     static char paths[8][PATH_MAX];
     static unsigned int nextPath = 0;
     char *path = paths[nextPath++ % 8];
@@ -59,46 +52,37 @@ static const char *jbroot_path(const char *relativePath) {
     }
     return path;
 }
-
-static int toggle_relaxin_tweak_injection(void) {
-    const char *markerPath = jbroot_path("/basebin/.safe_mode");
-    if (!markerPath[0]) return ENAMETOOLONG;
-
-    void *libjailbreak = dlopen(jbroot_path("/usr/lib/libjailbreak.dylib"), RTLD_LAZY);
-    if (!libjailbreak) {
-        fprintf(stderr, "Unable to load RootHide libjailbreak: %s\n", dlerror());
-        return ENOENT;
-    }
-
-    jb_checkin_t checkin = (jb_checkin_t)dlsym(libjailbreak, "jbclient_process_checkin");
-    jb_set_mac_label_t setMacLabel = (jb_set_mac_label_t)dlsym(libjailbreak, "jbclient_root_set_mac_label");
-    if (!checkin || !setMacLabel || checkin(NULL, NULL, NULL, NULL) != 0) {
-        dlclose(libjailbreak);
-        fprintf(stderr, "RootHide runtime check-in failed.\n");
-        return EPERM;
-    }
-
-    uint64_t originalLabel = 0;
-    int status = setMacLabel(1, UINT64_MAX, &originalLabel);
-    if (status != 0) {
-        dlclose(libjailbreak);
-        fprintf(stderr, "Unable to enter the RootHide unsandboxed context (%d).\n", status);
-        return status;
-    }
-
-    if (access(markerPath, F_OK) == 0) {
-        if (unlink(markerPath) != 0) status = errno;
-    } else {
-        int fd = open(markerPath, O_WRONLY | O_CREAT, 0644);
-        if (fd < 0) status = errno;
-        else close(fd);
-    }
-
-    int restoreStatus = setMacLabel(1, originalLabel, NULL);
-    dlclose(libjailbreak);
-
-    if (status == 0 && restoreStatus != 0) status = restoreStatus;
+static int run_unsandboxed_begin(uint64_t *originalLabel, bool *changedLabel) {
+    *changedLabel = false;
+    if (!gLibjailbreak) resolve_jailbreak_root();
+    if (!gLibjailbreak) return ENOENT;
+    roothide_check_t isRootHide = (roothide_check_t)dlsym(gLibjailbreak, "jbclient_roothide_jailbroken");
+    set_mac_label_t setMacLabel = (set_mac_label_t)dlsym(gLibjailbreak, "jbclient_root_set_mac_label");
+    if (!isRootHide || !setMacLabel || !isRootHide()) return 0;
+    int status = setMacLabel(1, UINT64_MAX, originalLabel);
+    if (status == 0) *changedLabel = true;
     return status;
+}
+static int run_unsandboxed_end(uint64_t originalLabel, bool changedLabel) {
+    if (!changedLabel) return 0;
+    set_mac_label_t setMacLabel = (set_mac_label_t)dlsym(gLibjailbreak, "jbclient_root_set_mac_label");
+    return setMacLabel ? setMacLabel(1, originalLabel, NULL) : ENOENT;
+}
+static int elevate_effective_ids(void) {
+    if (geteuid() != 0 && seteuid(0) != 0) return errno ? errno : EPERM;
+    if (getegid() != 0 && setegid(0) != 0) return errno ? errno : EPERM;
+    return (geteuid() == 0 && getegid() == 0) ? 0 : EPERM;
+}
+static int spawn_suspended_and_resume(const char *path, char *const argv[]) {
+    posix_spawnattr_t attr;
+    int status = posix_spawnattr_init(&attr);
+    if (status != 0) return status;
+    status = posix_spawnattr_setflags(&attr, POSIX_SPAWN_START_SUSPENDED);
+    pid_t pid = -1;
+    if (status == 0) status = posix_spawn(&pid, path, NULL, &attr, argv, environ);
+    posix_spawnattr_destroy(&attr);
+    if (status != 0) return status;
+    return kill(pid, SIGCONT) == 0 ? 0 : (errno ? errno : EIO);
 }
 
 typedef enum {
@@ -150,6 +134,8 @@ static int elevate_effective_ids(void) {
     return 0;
 }
 
+extern char **environ;
+
 int main(int argc, char **argv, char **envp) {
     if (!parent_is_tweaksettings()) {
         fprintf(stderr, "This utility can only be launched by TweakSettings.app.\n");
@@ -186,9 +172,16 @@ int main(int argc, char **argv, char **envp) {
         case TSUtilityActionTypeHelp:
             print_usage();
             return EX_OK;
-        case TSUtilityActionTypeRespring:
-            execl(jbroot_path("/usr/bin/killall"), "killall", "backboardd", NULL);
+        case TSUtilityActionTypeRespring: {
+            uint64_t oldLabel = 0; bool changed = false;
+            int scope = run_unsandboxed_begin(&oldLabel, &changed);
+            if (scope != 0) return EX_NOPERM;
+            execl(jbroot_path("/usr/bin/sbreload"), "sbreload", NULL);
+            int err = errno ? errno : EIO;
+            run_unsandboxed_end(oldLabel, changed);
+            errno = err;
             break;
+        }
         case TSUtilityActionTypeSafemode:
             execl(jbroot_path("/usr/bin/killall"), "killall", "-SEGV", "SpringBoard", NULL);
             break;
@@ -201,18 +194,22 @@ int main(int argc, char **argv, char **envp) {
         case TSUtilityActionTypeReboot:
             execl(jbroot_path("/usr/sbin/reboot"), "reboot", NULL);
             break;
-        case TSUtilityActionTypeUSReboot:
-            execl(jbroot_path("/basebin/jbctl"), "jbctl", "reboot_userspace", NULL);
-            break;
-        case TSUtilityActionTypeTweakinject: {
-            int status = toggle_relaxin_tweak_injection();
-            if (status != 0) {
-                fprintf(stderr, "Failed to toggle Relaxin tweak injection (%d).\n", status);
+        case TSUtilityActionTypeUSReboot: {
+            uint64_t oldLabel = 0; bool changed = false;
+            int scope = run_unsandboxed_begin(&oldLabel, &changed);
+            if (scope != 0) return EX_NOPERM;
+            char *args[] = { "jbctl", "reboot_userspace", NULL };
+            int spawnStatus = spawn_suspended_and_resume(jbroot_path("/basebin/jbctl"), args);
+            int restoreStatus = run_unsandboxed_end(oldLabel, changed);
+            if (spawnStatus != 0 || restoreStatus != 0) {
+                fprintf(stderr, "Relaxin userspace restart failed (%d / %d).\\n", spawnStatus, restoreStatus);
                 return EX_UNAVAILABLE;
             }
-            execl(jbroot_path("/basebin/jbctl"), "jbctl", "reboot_userspace", NULL);
-            break;
+            return EX_OK;
         }
+        case TSUtilityActionTypeTweakinject:
+            fprintf(stderr, "No verified public Relaxin tweak-injection toggle API is available.\\n");
+            return EX_UNAVAILABLE;
         case TSUtilityActionTypeSubstrated:
             execl(jbroot_path("/etc/rc.d/substrate"), "substrate", NULL);
             break;

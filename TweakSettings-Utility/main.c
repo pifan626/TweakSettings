@@ -18,10 +18,7 @@
 #import "rootless.h"
 
 extern char **environ;
-
 int proc_pidpath(pid_t pid, void *buffer, uint32_t buffersize);
-
-extern char **environ;
 
 static char gJailbreakRoot[PATH_MAX];
 static void *gLibjailbreak;

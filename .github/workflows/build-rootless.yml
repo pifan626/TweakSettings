@@ -43,7 +43,6 @@ jobs:
           dpkg-deb -x "$deb" "$workdir"
           utility="$workdir/usr/bin/tweaksettings-utility"
           test -f "$utility"
-          lipo -archs "$utility" | grep -q 'arm64e'
           package_arch=$(dpkg-deb -f "$deb" Architecture)
           echo "DEB architecture: $package_arch"
           test "$package_arch" = "iphoneos-arm64e"

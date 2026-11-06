@@ -50,10 +50,13 @@ jobs:
           echo "DEB architecture: $package_arch"
           test "$package_arch" = "iphoneos-arm64e"
           dpkg-deb -I "$deb"
+          shasum -a 256 "$deb" | tee "$deb.sha256"
 
       - name: Upload DEB
         uses: actions/upload-artifact@v4
         with:
           name: TweakSettings-zh_CN-rootless-arm64e
-          path: Releases/*.deb
+          path: |
+            Releases/*.deb
+            Releases/*.deb.sha256
           if-no-files-found: error

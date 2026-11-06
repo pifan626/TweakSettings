@@ -254,7 +254,7 @@ int main(int argc, char **argv, char **envp) {
                 } else if (markerChanged && !markerWasPresent) {
                     unlink(safeModePath);
                 }
-                fprintf(stderr, "Injection marker update failed (%d); access-scope restore: %d.\\n",
+                fprintf(stderr, "Injection marker update failed (%d); access-scope restore: %d.\n",
                         operationStatus, restoreStatus);
                 return EX_UNAVAILABLE;
             }

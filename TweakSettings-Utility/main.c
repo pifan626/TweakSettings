@@ -202,7 +202,7 @@ int main(int argc, char **argv, char **envp) {
             bool changedLabel = false;
             int scopeStatus = run_unsandboxed_begin(&oldLabel, &changedLabel);
             if (scopeStatus != 0) {
-                fprintf(stderr, "Unable to enter filesystem access scope (%d).\\n", scopeStatus);
+                fprintf(stderr, "Unable to enter filesystem access scope (%d).\n", scopeStatus);
                 return EX_NOPERM;
             }
 
@@ -232,14 +232,14 @@ int main(int argc, char **argv, char **envp) {
 
             int restoreStatus = run_unsandboxed_end(oldLabel, changedLabel);
             if (operationStatus != 0 || restoreStatus != 0) {
-                fprintf(stderr, "Injection marker update failed (%d); access-scope restore: %d.\\n",
+                fprintf(stderr, "Injection marker update failed (%d); access-scope restore: %d.\n",
                         operationStatus, restoreStatus);
                 return EX_UNAVAILABLE;
             }
 
             execl(jbroot_path("/usr/bin/sbreload"), "sbreload", NULL);
             int execError = errno ? errno : EIO;
-            fprintf(stderr, "Injection state changed, but SpringBoard restart failed: %s\\n", strerror(execError));
+            fprintf(stderr, "Injection state changed, but SpringBoard restart failed: %s\n", strerror(execError));
             return EX_UNAVAILABLE;
         }
         case TSUtilityActionTypeSubstrated:

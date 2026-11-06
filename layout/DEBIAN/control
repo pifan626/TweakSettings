@@ -3,7 +3,7 @@ Name: TweakSettings
 Depends: firmware (>= 10.0), preferenceloader | com.creaturecoding.preferred
 Version: 1.1.1
 Priority: optional
-Architecture: iphoneos-arm
+Architecture: iphoneos-arm64e
 Description: Dedicated settings app for tweaks
 Maintainer: CreatureSurvive <support@creaturecoding.com>
 Author: CreatureSurvive <support@creaturecoding.com>

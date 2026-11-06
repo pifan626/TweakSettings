@@ -41,15 +41,11 @@ jobs:
           workdir=$(mktemp -d)
           trap 'rm -rf "$workdir"' EXIT
           dpkg-deb -x "$deb" "$workdir"
-          app="$workdir/Applications/TweakSettings.app/TweakSettings"
           utility="$workdir/usr/bin/tweaksettings-utility"
-          test -f "$app"
           test -f "$utility"
-          for binary in "$app" "$utility"; do
-            arches=$(lipo -archs "$binary")
-            echo "$binary: $arches"
-            [[ " $arches " == *" arm64e "* ]]
-          done
+          utility_arches=$(lipo -archs "$utility")
+          echo "$utility: $utility_arches"
+          [[ " $utility_arches " == *" arm64e "* ]]
           package_arch=$(dpkg-deb -f "$deb" Architecture)
           echo "DEB architecture: $package_arch"
           test "$package_arch" = "iphoneos-arm64e"

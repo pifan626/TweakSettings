@@ -27,14 +27,22 @@ typedef bool (*roothide_check_t)(void);
 typedef int (*set_mac_label_t)(uint64_t, uint64_t, uint64_t *);
 
 static void resolve_jailbreak_root(void) {
-    if (gJailbreakRoot[0]) return;
-    gLibjailbreak = dlopen("/var/jb/usr/lib/libjailbreak.dylib", RTLD_LAZY);
-    if (gLibjailbreak) {
-        jbroot_getter_t getter = (jbroot_getter_t)dlsym(gLibjailbreak, "jbclient_get_jbroot");
-        const char *root = getter ? getter() : NULL;
-        if (root && root[0] == '/') strlcpy(gJailbreakRoot, root, sizeof(gJailbreakRoot));
+    if (!gJailbreakRoot[0]) {
+        gLibjailbreak = dlopen("/var/jb/usr/lib/libjailbreak.dylib", RTLD_LAZY);
+        if (gLibjailbreak) {
+            jbroot_getter_t getter = (jbroot_getter_t)dlsym(gLibjailbreak, "jbclient_get_jbroot");
+            const char *root = getter ? getter() : NULL;
+            if (root && root[0] == '/') strlcpy(gJailbreakRoot, root, sizeof(gJailbreakRoot));
+        }
+        if (!gJailbreakRoot[0]) strlcpy(gJailbreakRoot, "/var/jb", sizeof(gJailbreakRoot));
     }
-    if (!gJailbreakRoot[0]) strlcpy(gJailbreakRoot, "/var/jb", sizeof(gJailbreakRoot));
+
+    if (!gLibjailbreak) {
+        char libraryPath[PATH_MAX];
+        if (snprintf(libraryPath, sizeof(libraryPath), "%s/usr/lib/libjailbreak.dylib", gJailbreakRoot) < (int)sizeof(libraryPath)) {
+            gLibjailbreak = dlopen(libraryPath, RTLD_LAZY);
+        }
+    }
 }
 static const char *jbroot_path(const char *relativePath) {
     static char paths[8][PATH_MAX];
@@ -101,9 +109,6 @@ static void print_usage(void) {
 }
 
 static bool parent_is_tweaksettings(void) {
-    struct stat appStat;
-    if (lstat(jbroot_path("/Applications/TweakSettings.app/TweakSettings"), &appStat) != 0) return false;
-
     char buffer[PATH_MAX] = {0};
     int length = proc_pidpath(getppid(), buffer, sizeof(buffer));
     if (length <= 0) return false;
@@ -111,8 +116,18 @@ static bool parent_is_tweaksettings(void) {
     const char *expected = "/Applications/TweakSettings.app/TweakSettings";
     size_t actualLength = strlen(buffer);
     size_t expectedLength = strlen(expected);
-    return actualLength >= expectedLength &&
-           strcmp(buffer + actualLength - expectedLength, expected) == 0;
+    if (actualLength <= expectedLength ||
+        strcmp(buffer + actualLength - expectedLength, expected) != 0) return false;
+
+    size_t rootLength = actualLength - expectedLength;
+    if (rootLength >= sizeof(gJailbreakRoot)) return false;
+    memcpy(gJailbreakRoot, buffer, rootLength);
+    gJailbreakRoot[rootLength] = '\0';
+    if (!gJailbreakRoot[0]) strlcpy(gJailbreakRoot, "/", sizeof(gJailbreakRoot));
+
+    struct stat appStat;
+    if (lstat(buffer, &appStat) != 0 || !S_ISREG(appStat.st_mode)) return false;
+    return true;
 }
 
 static int elevate_effective_ids(void) {

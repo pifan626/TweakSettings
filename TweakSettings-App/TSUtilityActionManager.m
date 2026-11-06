@@ -95,8 +95,8 @@ NSString *TitleForActionType(NSString *type) {
     return nil;
 }
 
-// Relaxin 0.5.7 has no verified public tweak-injection toggle API.
-// Never infer injection state from an unverified marker file.
+// Relaxin SystemHook checks JBROOT/basebin/.safe_mode when a process starts.
+// A present marker disables tweak injection; absence enables it.
 static NSInteger TweakInjectEnabledState(void) {
     if (access(ROOT_PATH("/basebin/jbctl"), F_OK) == 0) return access(ROOT_PATH("/basebin/.safe_mode"), F_OK) == 0 ? 0 : 1;
     if (access("/var/jb/.installed_dopamine", F_OK) == 0) {

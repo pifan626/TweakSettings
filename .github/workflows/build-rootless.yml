@@ -44,8 +44,11 @@ jobs:
           utility="$workdir/usr/bin/tweaksettings-utility"
           test -f "$utility"
           package_arch=$(dpkg-deb -f "$deb" Architecture)
-          echo "DEB architecture: $package_arch"
-          test "$package_arch" = "iphoneos-arm64e"
+          echo "DEB architecture: $package_arch" >&2
+          if [[ "$package_arch" != "iphoneos-arm64e" ]]; then
+            dpkg-deb -I "$deb" >&2
+            exit 1
+          fi
           dpkg-deb -I "$deb"
           shasum -a 256 "$deb" | tee "$deb.sha256"
 

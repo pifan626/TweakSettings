@@ -48,8 +48,11 @@ jobs:
           for binary in "$app" "$utility"; do
             arches=$(lipo -archs "$binary")
             echo "$binary: $arches"
-            echo "$arches" | tr ' ' '\\n' | grep -qx arm64e
+            [[ " $arches " == *" arm64e "* ]]
           done
+          package_arch=$(dpkg-deb -f "$deb" Architecture)
+          echo "DEB architecture: $package_arch"
+          test "$package_arch" = "iphoneos-arm64e"
           dpkg-deb -I "$deb"
 
       - name: Upload DEB

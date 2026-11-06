@@ -98,7 +98,7 @@ NSString *TitleForActionType(NSString *type) {
 // Relaxin 0.5.7 has no verified public tweak-injection toggle API.
 // Never infer injection state from an unverified marker file.
 static NSInteger TweakInjectEnabledState(void) {
-    if (access(ROOT_PATH("/basebin/jbctl"), F_OK) == 0) return -1;
+    if (access(ROOT_PATH("/basebin/jbctl"), F_OK) == 0) return access(ROOT_PATH("/basebin/.safe_mode"), F_OK) == 0 ? 0 : 1;
     if (access("/var/jb/.installed_dopamine", F_OK) == 0) {
         return access("/var/jb/basebin/.safe_mode", F_OK) == 0 ? 0 : 1;
     }

@@ -212,27 +212,49 @@ int main(int argc, char **argv, char **envp) {
             struct stat jbctlStat, basebinStat, markerStat;
             int operationStatus = 0;
 
-            if (lstat(jbctlPath, &jbctlStat) != 0 || !S_ISREG(jbctlStat.st_mode) ||
-                lstat(basebinPath, &basebinStat) != 0 || !S_ISDIR(basebinStat.st_mode)) {
-                operationStatus = errno ? errno : ENOENT;
+            bool markerWasPresent = false;
+            bool markerChanged = false;
+            if (lstat(jbctlPath, &jbctlStat) != 0) {
+                operationStatus = errno ? errno : EIO;
+            } else if (!S_ISREG(jbctlStat.st_mode)) {
+                operationStatus = EINVAL;
+            } else if (lstat(basebinPath, &basebinStat) != 0) {
+                operationStatus = errno ? errno : EIO;
+            } else if (!S_ISDIR(basebinStat.st_mode)) {
+                operationStatus = ENOTDIR;
             } else if (lstat(safeModePath, &markerStat) == 0) {
                 if (!S_ISREG(markerStat.st_mode)) operationStatus = EINVAL;
-                else if (unlink(safeModePath) != 0) operationStatus = errno ? errno : EIO;
+                else {
+                    markerWasPresent = true;
+                    if (unlink(safeModePath) != 0) operationStatus = errno ? errno : EIO;
+                    else markerChanged = true;
+                }
             } else if (errno == ENOENT) {
                 int fd = open(safeModePath, O_WRONLY | O_CREAT | O_EXCL, 0644);
                 if (fd < 0) operationStatus = errno ? errno : EIO;
                 else {
+                    markerChanged = true;
                     if (fsync(fd) != 0) operationStatus = errno ? errno : EIO;
                     if (close(fd) != 0 && operationStatus == 0) operationStatus = errno ? errno : EIO;
-                    if (operationStatus != 0) unlink(safeModePath);
                 }
             } else {
                 operationStatus = errno ? errno : EIO;
             }
 
             int restoreStatus = run_unsandboxed_end(oldLabel, changedLabel);
-            if (operationStatus != 0 || restoreStatus != 0) {
-                fprintf(stderr, "Injection marker update failed (%d); access-scope restore: %d.\n",
+            if (restoreStatus != 0 && operationStatus == 0) operationStatus = restoreStatus;
+            if (operationStatus != 0) {
+                // Best-effort rollback so failures preserve the original marker state.
+                if (markerChanged && markerWasPresent) {
+                    int rollbackFD = open(safeModePath, O_WRONLY | O_CREAT | O_EXCL, 0644);
+                    if (rollbackFD >= 0) {
+                        fsync(rollbackFD);
+                        close(rollbackFD);
+                    }
+                } else if (markerChanged && !markerWasPresent) {
+                    unlink(safeModePath);
+                }
+                fprintf(stderr, "Injection marker update failed (%d); access-scope restore: %d.\\n",
                         operationStatus, restoreStatus);
                 return EX_UNAVAILABLE;
             }

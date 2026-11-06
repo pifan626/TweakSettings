@@ -30,7 +30,7 @@ jobs:
         run: |
           rm -f Releases/*.deb
           make clean
-          make package THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1 ARCHS=arm64e
+          make package THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1 ARCHS=arm64e THEOS_PACKAGE_ARCH=iphoneos-arm64e
 
       - name: Verify arm64e package payload
         run: |

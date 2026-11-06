@@ -42,7 +42,14 @@ jobs:
           trap 'rm -rf "$workdir"' EXIT
           dpkg-deb -x "$deb" "$workdir"
           utility=$(find "$workdir" -type f -path '*/usr/bin/tweaksettings-utility' -print -quit)
+          app=$(find "$workdir" -type f -path '*/Applications/TweakSettings.app/TweakSettings' -print -quit)
+          localization=$(find "$workdir" -type f -path '*/Applications/TweakSettings.app/zh_CN.lproj/Localizable.strings' -print -quit)
           test -n "$utility"
+          test -n "$app"
+          test -n "$localization"
+          echo "App executable: $app"
+          echo "App architectures: $(xcrun lipo -archs "$app")"
+          echo "Utility architectures: $(xcrun lipo -archs "$utility")"
           package_arch=$(dpkg-deb -f "$deb" Architecture)
           echo "DEB architecture: $package_arch" >&2
           if [[ "$package_arch" != "iphoneos-arm64e" ]]; then

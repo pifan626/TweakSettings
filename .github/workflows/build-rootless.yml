@@ -6,6 +6,10 @@ on:
     branches:
       - chinese-rootless
 
+concurrency:
+  group: rootless-deb-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: macos-15-intel
@@ -27,6 +31,26 @@ jobs:
           rm -f Releases/*.deb
           make clean
           make package THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1 ARCHS=arm64e
+
+      - name: Verify arm64e package payload
+        run: |
+          set -euo pipefail
+          deb_count=$(find Releases -maxdepth 1 -name '*.deb' -type f | wc -l | tr -d ' ')
+          test "$deb_count" = "1"
+          deb=$(find Releases -maxdepth 1 -name '*.deb' -type f -print -quit)
+          workdir=$(mktemp -d)
+          trap 'rm -rf "$workdir"' EXIT
+          dpkg-deb -x "$deb" "$workdir"
+          app="$workdir/Applications/TweakSettings.app/TweakSettings"
+          utility="$workdir/usr/bin/tweaksettings-utility"
+          test -f "$app"
+          test -f "$utility"
+          for binary in "$app" "$utility"; do
+            arches=$(lipo -archs "$binary")
+            echo "$binary: $arches"
+            echo "$arches" | tr ' ' '\\n' | grep -qx arm64e
+          done
+          dpkg-deb -I "$deb"
 
       - name: Upload DEB
         uses: actions/upload-artifact@v4

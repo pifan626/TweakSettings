@@ -198,38 +198,30 @@ int main(int argc, char **argv, char **envp) {
         case TSUtilityActionTypeTweakinject: {
             // Relaxin SystemHook checks JBROOT/basebin/.safe_mode for every
             // newly launched process. Presence disables tweak injection.
-            const char *jbctlPath = jbroot_path("/basebin/jbctl");
-            const char *basebinPath = jbroot_path("/basebin");
-            const char *safeModePath = jbroot_path("/basebin/.safe_mode");
-            struct stat jbctlStat, basebinStat, markerStat;
-
-            if (lstat(jbctlPath, &jbctlStat) != 0 || !S_ISREG(jbctlStat.st_mode) ||
-                lstat(basebinPath, &basebinStat) != 0 || !S_ISDIR(basebinStat.st_mode)) {
-                fprintf(stderr, "Relaxin environment check failed; no changes were made.\\n");
-                return EX_UNAVAILABLE;
-            }
-
             uint64_t oldLabel = 0;
             bool changedLabel = false;
             int scopeStatus = run_unsandboxed_begin(&oldLabel, &changedLabel);
             if (scopeStatus != 0) {
-                fprintf(stderr, "Unable to enter the required filesystem access scope (%d).\\n", scopeStatus);
+                fprintf(stderr, "Unable to enter filesystem access scope (%d).\\n", scopeStatus);
                 return EX_NOPERM;
             }
 
+            const char *jbctlPath = jbroot_path("/basebin/jbctl");
+            const char *basebinPath = jbroot_path("/basebin");
+            const char *safeModePath = jbroot_path("/basebin/.safe_mode");
+            struct stat jbctlStat, basebinStat, markerStat;
             int operationStatus = 0;
-            bool markerExists = (lstat(safeModePath, &markerStat) == 0);
-            if (markerExists) {
-                if (!S_ISREG(markerStat.st_mode)) {
-                    operationStatus = EINVAL;
-                } else if (unlink(safeModePath) != 0) {
-                    operationStatus = errno ? errno : EIO;
-                }
+
+            if (lstat(jbctlPath, &jbctlStat) != 0 || !S_ISREG(jbctlStat.st_mode) ||
+                lstat(basebinPath, &basebinStat) != 0 || !S_ISDIR(basebinStat.st_mode)) {
+                operationStatus = errno ? errno : ENOENT;
+            } else if (lstat(safeModePath, &markerStat) == 0) {
+                if (!S_ISREG(markerStat.st_mode)) operationStatus = EINVAL;
+                else if (unlink(safeModePath) != 0) operationStatus = errno ? errno : EIO;
             } else if (errno == ENOENT) {
                 int fd = open(safeModePath, O_WRONLY | O_CREAT | O_EXCL, 0644);
-                if (fd < 0) {
-                    operationStatus = errno ? errno : EIO;
-                } else {
+                if (fd < 0) operationStatus = errno ? errno : EIO;
+                else {
                     if (fsync(fd) != 0) operationStatus = errno ? errno : EIO;
                     if (close(fd) != 0 && operationStatus == 0) operationStatus = errno ? errno : EIO;
                     if (operationStatus != 0) unlink(safeModePath);
@@ -240,13 +232,11 @@ int main(int argc, char **argv, char **envp) {
 
             int restoreStatus = run_unsandboxed_end(oldLabel, changedLabel);
             if (operationStatus != 0 || restoreStatus != 0) {
-                fprintf(stderr, "Tweak injection marker update failed (%d); access-scope restore: %d.\\n",
+                fprintf(stderr, "Injection marker update failed (%d); access-scope restore: %d.\\n",
                         operationStatus, restoreStatus);
                 return EX_UNAVAILABLE;
             }
 
-            // Restart SpringBoard so its newly launched process uses the new
-            // injection state. Other apps pick it up on their next launch.
             execl(jbroot_path("/usr/bin/sbreload"), "sbreload", NULL);
             int execError = errno ? errno : EIO;
             fprintf(stderr, "Injection state changed, but SpringBoard restart failed: %s\\n", strerror(execError));

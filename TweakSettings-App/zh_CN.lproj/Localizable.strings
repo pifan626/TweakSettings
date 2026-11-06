@@ -54,4 +54,4 @@
 "TWEAKINJECT_STATE_UNKNOWN_KEY" = "状态未知（无法识别当前注入环境）";
 "TWEAKINJECT_ACTION_ENABLE_KEY" = "开启插件注入";
 "TWEAKINJECT_ACTION_DISABLE_KEY" = "关闭插件注入";
-"TWEAKINJECT_CONFIRM_MESSAGE_KEY" = "当前状态：%@\n\n即将执行：%@。此操作将重启用户空间或桌面进程。\n\n确定继续吗？";
+"TWEAKINJECT_CONFIRM_MESSAGE_KEY" = "当前状态：%@\n\n即将执行：%@。此操作将重新启动 SpringBoard；其他应用将在下次启动时应用新状态。\n\n确定继续吗？";

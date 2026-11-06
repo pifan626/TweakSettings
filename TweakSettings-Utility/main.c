@@ -96,7 +96,7 @@ static void print_usage(void) {
     printf("[--ldrestart]:\n\tPerform ldrestart\n");
     printf("[--reboot]:\n\tReboot the device\n");
     printf("[--usreboot]:\n\tRestart userspace through Relaxin jbctl\n");
-    printf("[--tweakinject]:\n\tNot available on Relaxin 0.5.7 (no public toggle API)\n");
+    printf("[--tweakinject]:\n\tToggle Relaxin tweak injection and restart SpringBoard\n");
     printf("[--help]:\n\tShow this help text\n\n");
 }
 

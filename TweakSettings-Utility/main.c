@@ -213,22 +213,26 @@ int main(int argc, char **argv, char **envp) {
         case TSUtilityActionTypeTweakinject: {
             // Relaxin SystemHook checks JBROOT/basebin/.safe_mode for every
             // newly launched process. Presence disables tweak injection.
+            // Keep the RootHide filesystem access scope active until sbreload
+            // has been exec'd; restoring the MAC label before exec can make
+            // the restart fail even though the marker was changed.
             uint64_t oldLabel = 0;
             bool changedLabel = false;
             int scopeStatus = run_unsandboxed_begin(&oldLabel, &changedLabel);
             if (scopeStatus != 0) {
-                fprintf(stderr, "Unable to enter filesystem access scope (%d).\n", scopeStatus);
+                fprintf(stderr, "Unable to enter filesystem access scope (%d).\\n", scopeStatus);
                 return EX_NOPERM;
             }
 
             const char *jbctlPath = jbroot_path("/basebin/jbctl");
             const char *basebinPath = jbroot_path("/basebin");
             const char *safeModePath = jbroot_path("/basebin/.safe_mode");
+            const char *sbreloadPath = jbroot_path("/usr/bin/sbreload");
             struct stat jbctlStat, basebinStat, markerStat;
             int operationStatus = 0;
-
             bool markerWasPresent = false;
             bool markerChanged = false;
+
             if (lstat(jbctlPath, &jbctlStat) != 0) {
                 operationStatus = errno ? errno : EIO;
             } else if (!S_ISREG(jbctlStat.st_mode)) {
@@ -238,16 +242,18 @@ int main(int argc, char **argv, char **envp) {
             } else if (!S_ISDIR(basebinStat.st_mode)) {
                 operationStatus = ENOTDIR;
             } else if (lstat(safeModePath, &markerStat) == 0) {
-                if (!S_ISREG(markerStat.st_mode)) operationStatus = EINVAL;
-                else {
+                if (!S_ISREG(markerStat.st_mode)) {
+                    operationStatus = EINVAL;
+                } else {
                     markerWasPresent = true;
                     if (unlink(safeModePath) != 0) operationStatus = errno ? errno : EIO;
                     else markerChanged = true;
                 }
             } else if (errno == ENOENT) {
                 int fd = open(safeModePath, O_WRONLY | O_CREAT | O_EXCL, 0644);
-                if (fd < 0) operationStatus = errno ? errno : EIO;
-                else {
+                if (fd < 0) {
+                    operationStatus = errno ? errno : EIO;
+                } else {
                     markerChanged = true;
                     if (fsync(fd) != 0) operationStatus = errno ? errno : EIO;
                     if (close(fd) != 0 && operationStatus == 0) operationStatus = errno ? errno : EIO;
@@ -256,28 +262,53 @@ int main(int argc, char **argv, char **envp) {
                 operationStatus = errno ? errno : EIO;
             }
 
-            int restoreStatus = run_unsandboxed_end(oldLabel, changedLabel);
-            if (restoreStatus != 0 && operationStatus == 0) operationStatus = restoreStatus;
-            if (operationStatus != 0) {
-                // Best-effort rollback so failures preserve the original marker state.
-                if (markerChanged && markerWasPresent) {
+            // If the marker update failed, restore its original state before
+            // leaving the filesystem access scope.
+            if (operationStatus != 0 && markerChanged) {
+                if (markerWasPresent) {
                     int rollbackFD = open(safeModePath, O_WRONLY | O_CREAT | O_EXCL, 0644);
                     if (rollbackFD >= 0) {
-                        fsync(rollbackFD);
-                        close(rollbackFD);
+                        (void)fsync(rollbackFD);
+                        (void)close(rollbackFD);
                     }
-                } else if (markerChanged && !markerWasPresent) {
-                    unlink(safeModePath);
+                } else {
+                    (void)unlink(safeModePath);
                 }
-                fprintf(stderr, "Injection marker update failed (%d); access-scope restore: %d.\n",
-                        operationStatus, restoreStatus);
-                return EX_UNAVAILABLE;
             }
 
-            execl(jbroot_path("/usr/bin/sbreload"), "sbreload", NULL);
-            int execError = errno ? errno : EIO;
-            fprintf(stderr, "Injection state changed, but SpringBoard restart failed: %s\n", strerror(execError));
-            return EX_UNAVAILABLE;
+            if (operationStatus == 0) {
+                // exec replaces this process. On success the elevated access
+                // scope remains only in the new sbreload process; the process
+                // teardown releases it. If exec fails, roll back below.
+                execl(sbreloadPath, "sbreload", NULL);
+                operationStatus = errno ? errno : EIO;
+                fprintf(stderr, "SpringBoard restart failed: %s\\n", strerror(operationStatus));
+
+                if (markerChanged) {
+                    if (markerWasPresent) {
+                        int rollbackFD = open(safeModePath, O_WRONLY | O_CREAT | O_EXCL, 0644);
+                        if (rollbackFD >= 0) {
+                            (void)fsync(rollbackFD);
+                            (void)close(rollbackFD);
+                        } else {
+                            fprintf(stderr, "Unable to restore the previous injection marker: %s\\n", strerror(errno));
+                        }
+                    } else if (unlink(safeModePath) != 0 && errno != ENOENT) {
+                        fprintf(stderr, "Unable to roll back the injection marker: %s\\n", strerror(errno));
+                    }
+                }
+            }
+
+            int restoreStatus = run_unsandboxed_end(oldLabel, changedLabel);
+            if (restoreStatus != 0) {
+                fprintf(stderr, "Unable to restore filesystem access scope (%d).\\n", restoreStatus);
+                return EX_NOPERM;
+            }
+            if (operationStatus != 0) {
+                fprintf(stderr, "Injection toggle failed (%d).\\n", operationStatus);
+                return EX_UNAVAILABLE;
+            }
+            return EX_OK;
         }
         case TSUtilityActionTypeSubstrated:
             execl(jbroot_path("/etc/rc.d/substrate"), "substrate", NULL);
